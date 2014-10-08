@@ -64,7 +64,7 @@ typedef enum {
 
 /* Global Variables */
 #if defined(PIOS_INCLUDE_FREERTOS)
-extern xSemaphoreHandle PIOS_BMP085_EOC;
+extern int32_t PIOS_BMP085_EOC;
 #else
 extern int32_t PIOS_BMP085_EOC;
 #endif
