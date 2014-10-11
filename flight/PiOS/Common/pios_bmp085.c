@@ -373,14 +373,14 @@ int32_t PIOS_BMP085_Test()
     PIOS_DELAY_WaitmS(5);
     PIOS_BMP085_ReadADC();
     if (cur_value == dev->temperature_unscaled)
-        return -1;
+        return -2;
 
     cur_value = dev->pressure_unscaled;
     PIOS_BMP085_StartADC(PRESSURE_CONV);
     PIOS_DELAY_WaitmS(26);
     PIOS_BMP085_ReadADC();
     if (cur_value == dev->pressure_unscaled)
-        return -1;
+        return -3;
 
     return 0;
 }
