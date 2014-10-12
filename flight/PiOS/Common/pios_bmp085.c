@@ -212,9 +212,6 @@ static int32_t PIOS_BMP085_StartADC(enum conversion_type type)
         return -1;
     }
 
-    uint8_t data = 0;
-    PIOS_BMP085_Read(BMP085_CTRL_ADDR, &data, 1);
-
     dev->current_conversion_type = type;
 
     return 0;
