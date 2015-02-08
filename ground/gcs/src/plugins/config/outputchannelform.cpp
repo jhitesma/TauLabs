@@ -3,6 +3,7 @@
  *
  * @file       outputchannelform.cpp
  * @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2011.
+ * @author     Tau Labs, http://taulabs.org, Copyright (C) 2014
  * @addtogroup GCSPlugins GCS Plugins
  * @{
  * @addtogroup ConfigPlugin Config Plugin
@@ -56,7 +57,7 @@ OutputChannelForm::OutputChannelForm(const int index, QWidget *parent, const boo
         }
     }
 
-    // The convention for OP is Channel 1 to Channel 10.
+    // The convention is Channel 1 to Channel 10.
     ui.actuatorNumber->setText(QString("%1:").arg(m_index+1));
 
     // Register for ActuatorSettings changes:
@@ -68,8 +69,8 @@ OutputChannelForm::OutputChannelForm(const int index, QWidget *parent, const boo
     connect(ui.actuatorNeutral, SIGNAL(valueChanged(int)), this, SLOT(sendChannelTest(int)));
 
     // Connect UI elements to dirty/clean (i.e. changed/unchanged) signal/slot
-    connect(ui.actuatorMin, SIGNAL(editingFinished()), this, SLOT(notifyFormChanged()));
-    connect(ui.actuatorMax, SIGNAL(editingFinished()), this, SLOT(notifyFormChanged()));
+    connect(ui.actuatorMin, SIGNAL(valueChanged(int)), this, SLOT(notifyFormChanged()));
+    connect(ui.actuatorMax, SIGNAL(valueChanged(int)), this, SLOT(notifyFormChanged()));
     connect(ui.actuatorNeutral, SIGNAL(sliderReleased()), this, SLOT(notifyFormChanged()));
 
     ui.actuatorLink->setChecked(false);
@@ -222,10 +223,18 @@ void OutputChannelForm::setChannelRange()
     if (ui.actuatorMin->value() < ui.actuatorMax->value())
     {
         ui.actuatorNeutral->setRange(ui.actuatorMin->value(), ui.actuatorMax->value());
+        ui.actuatorNeutral->setEnabled(true);
     }
-    else
+    else if (ui.actuatorMin->value() > ui.actuatorMax->value())
     {
         ui.actuatorNeutral->setRange(ui.actuatorMax->value(), ui.actuatorMin->value());
+        ui.actuatorNeutral->setEnabled(true);
+    } else {
+        // when the min and max is equal, disable this slider to prevent crash
+        // from Qt bug: https://bugreports.qt.io/browse/QTBUG-43398
+        ui.actuatorNeutral->setRange(ui.actuatorMin->value()-1, ui.actuatorMin->value()+1);
+        ui.actuatorNeutral->setEnabled(false);
+	setNeutral(ui.actuatorMin->value());
     }
 
     // Force a full slider update

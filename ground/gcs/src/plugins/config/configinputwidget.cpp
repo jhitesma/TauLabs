@@ -318,7 +318,7 @@ void ConfigInputWidget::resizeEvent(QResizeEvent *event)
 
 void ConfigInputWidget::openHelp()
 {
-    QDesktopServices::openUrl( QUrl("http://wiki.taulabs.org/OnlineHelp:-Input-Configuration", QUrl::StrictMode) );
+    QDesktopServices::openUrl( QUrl("https://github.com/TauLabs/TauLabs/wiki/OnlineHelp:-Input-Configuration", QUrl::StrictMode) );
 }
 
 void ConfigInputWidget::goToWizard()
@@ -690,6 +690,14 @@ void ConfigInputWidget::wizardTearDownStep(enum wizardSteps step)
         {
             manualSettingsData.ChannelNeutral[i] = manualCommandData.Channel[i];
         }
+
+        // If user skipped flight mode then force the number of flight modes to 1
+        // for valid connection
+        if (manualSettingsData.ChannelGroups[ManualControlSettings::CHANNELMIN_FLIGHTMODE] ==
+                ManualControlSettings::CHANNELGROUPS_NONE) {
+            manualSettingsData.FlightModeNumber = 1;
+        }
+
         manualSettingsObj->setData(manualSettingsData);
         setTxMovement(nothing);
         break;
@@ -794,7 +802,6 @@ void ConfigInputWidget::fastMdata()
   */
 void ConfigInputWidget::restoreMdata()
 {
-    UAVObjectUtilManager* utilMngr = getObjectUtilManager();
     foreach (QString objName, originalMetaData.keys()) {
         UAVObject *obj = getObjectManager()->getObject(objName);
         obj->setMetadata(originalMetaData.value(objName));
