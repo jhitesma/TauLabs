@@ -44,6 +44,7 @@
 #include "accels.h"
 #include "actuatordesired.h"
 #include "attitudeactual.h"
+#include "brushlessgimbalsettings.h"
 #include "cameradesired.h"
 #include "flightstatus.h"
 #include "gyros.h"
@@ -70,7 +71,7 @@
 #if defined(PIOS_STABILIZATION_STACK_SIZE)
 #define STACK_SIZE_BYTES PIOS_STABILIZATION_STACK_SIZE
 #else
-#define STACK_SIZE_BYTES 724
+#define STACK_SIZE_BYTES 800
 #endif
 
 #define TASK_PRIORITY PIOS_THREAD_PRIO_HIGHEST
@@ -391,7 +392,7 @@ static void stabilizationTask(void* parameters)
 					// Compute the outer loop for the attitude control
 					float rateDesiredAttitude = pid_apply(&pids[PID_ATT_ROLL + i], local_attitude_error[i], dT);
 					// Compute the desire rate for a rate control
-					float rateDesiredRate = expo3(raw_input[i], settings.RateExpo[i]) * settings.ManualRate[i];
+					float rateDesiredRate = raw_input[i] * settings.ManualRate[i];
 
 					// Blend from one rate to another. The maximum of all stick positions is used for the
 					// amount so that when one axis goes completely to rate the other one does too. This
@@ -644,9 +645,21 @@ static void stabilizationTask(void* parameters)
 							error = circular_modulus_deg(angle - attitudeActual.Pitch);
 							break;
 						case ROLL:
-							// For ROLL POI mode we track the FC roll angle (scaled)
+						{
+							uint8_t roll_fraction = 0;
+#ifdef GIMBAL
+							if (BrushlessGimbalSettingsHandle()) {
+								BrushlessGimbalSettingsRollFractionGet(&roll_fraction);
+							}
+#endif /* GIMBAL */
+
+							// For ROLL POI mode we track the FC roll angle (scaled) to
+							// allow keeping some motion
 							CameraDesiredRollGet(&angle);
-							error = circular_modulus_deg(angle - attitudeActual.Pitch);
+							angle *= roll_fraction / 100.0f;
+							error = circular_modulus_deg(angle - attitudeActual.Roll);
+						}
+							break;
 						case YAW:
 							CameraDesiredBearingGet(&angle);
 							error = circular_modulus_deg(angle - attitudeActual.Yaw);

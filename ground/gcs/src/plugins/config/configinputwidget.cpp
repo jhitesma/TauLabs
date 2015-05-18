@@ -87,8 +87,8 @@ ConfigInputWidget::ConfigInputWidget(QWidget *parent) : ConfigTaskWidget(parent)
         addUAVObjectToWidgetRelation("ManualControlSettings","ChannelGroups",inpForm->ui->channelGroup,index);
         addUAVObjectToWidgetRelation("ManualControlSettings","ChannelNumber",inpForm->ui->channelNumber,index);
         addUAVObjectToWidgetRelation("ManualControlSettings","ChannelMin",inpForm->ui->channelMin,index);
-        addUAVObjectToWidgetRelation("ManualControlSettings","ChannelNeutral",inpForm->ui->channelNeutral,index);
         addUAVObjectToWidgetRelation("ManualControlSettings","ChannelMax",inpForm->ui->channelMax,index);
+        addUAVObjectToWidgetRelation("ManualControlSettings","ChannelNeutral",inpForm->ui->channelNeutral,index);
         ++index;
     }
 
@@ -959,9 +959,6 @@ void ConfigInputWidget::identifyLimits()
             // ratio between + and - range.
             manualSettingsData.ChannelNeutral[i] = manualSettingsData.ChannelMin[i] +
                     (manualSettingsData.ChannelMax[i] - manualSettingsData.ChannelMin[i]) * THROTTLE_NEUTRAL_FRACTION;
-        } else {
-            manualSettingsData.ChannelNeutral[i] =
-                    (manualSettingsData.ChannelMin[i] + manualSettingsData.ChannelMax[i]) * 0.5;
         }
     }
     manualSettingsObj->setData(manualSettingsData);

@@ -411,6 +411,9 @@ int32_t transmitter_control_select(bool reset_controller)
 	case FLIGHTSTATUS_FLIGHTMODE_ACRO:
 	case FLIGHTSTATUS_FLIGHTMODE_LEVELING:
 	case FLIGHTSTATUS_FLIGHTMODE_VIRTUALBAR:
+	case FLIGHTSTATUS_FLIGHTMODE_MWRATE:
+	case FLIGHTSTATUS_FLIGHTMODE_HORIZON:
+	case FLIGHTSTATUS_FLIGHTMODE_AXISLOCK:
 	case FLIGHTSTATUS_FLIGHTMODE_STABILIZED1:
 	case FLIGHTSTATUS_FLIGHTMODE_STABILIZED2:
 	case FLIGHTSTATUS_FLIGHTMODE_STABILIZED3:
@@ -633,8 +636,20 @@ static void process_transmitter_events(ManualControlCommandData * cmd, ManualCon
 	{
 		set_armed_if_changed(FLIGHTSTATUS_ARMED_ARMED);
 
-		// Check for arming timeout if transmitter invalid
-		if (!valid) {
+		// Determine whether to disarm when throttle is low
+		uint8_t flight_mode;
+		FlightStatusFlightModeGet(&flight_mode);
+		bool autonomous_mode = 
+		                       flight_mode == FLIGHTSTATUS_FLIGHTMODE_POSITIONHOLD ||
+		                       flight_mode == FLIGHTSTATUS_FLIGHTMODE_RETURNTOHOME ||
+		                       flight_mode == FLIGHTSTATUS_FLIGHTMODE_PATHPLANNER  ||
+		                       flight_mode == FLIGHTSTATUS_FLIGHTMODE_TABLETCONTROL;
+		bool check_throttle = settings->ArmTimeoutAutonomous == MANUALCONTROLSETTINGS_ARMTIMEOUTAUTONOMOUS_ENABLED ||
+			!autonomous_mode;
+		bool low_throttle = cmd->Throttle < 0;
+
+		// Check for arming timeout if transmitter invalid or throttle is low and checked
+		if (!valid || (low_throttle && check_throttle)) {
 			if ((settings->ArmedTimeout != 0) && (timeDifferenceMs(armedDisarmStart, lastSysTime) > settings->ArmedTimeout))
 				arm_state = ARM_STATE_DISARMED;
 		} else {
@@ -770,6 +785,9 @@ static bool updateRcvrActivityCompare(uintptr_t rcvr_id, struct rcvr_activity_fs
 			case MANUALCONTROLSETTINGS_CHANNELGROUPS_RFM22B:
 				group = RECEIVERACTIVITY_ACTIVEGROUP_RFM22B;
 				break;
+			case MANUALCONTROLSETTINGS_CHANNELGROUPS_OPENLRS:
+				group = RECEIVERACTIVITY_ACTIVEGROUP_OPENLRS;
+				break;
 			case MANUALCONTROLSETTINGS_CHANNELGROUPS_GCS:
 				group = RECEIVERACTIVITY_ACTIVEGROUP_GCS;
 				break;
@@ -878,6 +896,18 @@ static void update_stabilization_desired(ManualControlCommandData * cmd, ManualC
 	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_VIRTUALBAR,
 	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_VIRTUALBAR,
 	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_AXISLOCK};
+	const uint8_t MWRATE_SETTINGS[3] = {
+	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_MWRATE,
+	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_MWRATE,
+	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_MWRATE};
+	const uint8_t HORIZON_SETTINGS[3] = {
+	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_HORIZON,
+	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_HORIZON,
+	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_AXISLOCK};
+	const uint8_t AXISLOCK_SETTINGS[3] = {
+	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_AXISLOCK,
+	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_AXISLOCK,
+	                                    STABILIZATIONDESIRED_STABILIZATIONMODE_AXISLOCK};
 
 	const uint8_t * stab_settings;
 	FlightStatusData flightStatus;
@@ -891,6 +921,15 @@ static void update_stabilization_desired(ManualControlCommandData * cmd, ManualC
 			break;
 		case FLIGHTSTATUS_FLIGHTMODE_VIRTUALBAR:
 			stab_settings = VIRTUALBAR_SETTINGS;
+			break;
+		case FLIGHTSTATUS_FLIGHTMODE_MWRATE:
+			stab_settings = MWRATE_SETTINGS;
+			break;
+		case FLIGHTSTATUS_FLIGHTMODE_HORIZON:
+			stab_settings = HORIZON_SETTINGS;
+			break;
+		case FLIGHTSTATUS_FLIGHTMODE_AXISLOCK:
+			stab_settings = AXISLOCK_SETTINGS;
 			break;
 		case FLIGHTSTATUS_FLIGHTMODE_STABILIZED1:
 			stab_settings = settings->Stabilization1Settings;
@@ -920,7 +959,7 @@ static void update_stabilization_desired(ManualControlCommandData * cmd, ManualC
 	     (stab_settings[0] == STABILIZATIONDESIRED_STABILIZATIONMODE_ATTITUDE) ? cmd->Roll * stabSettings.RollMax :
 	     (stab_settings[0] == STABILIZATIONDESIRED_STABILIZATIONMODE_AXISLOCK) ? expo3(cmd->Roll, stabSettings.RateExpo[STABILIZATIONSETTINGS_RATEEXPO_ROLL]) * stabSettings.ManualRate[STABILIZATIONSETTINGS_MANUALRATE_ROLL] :
 	     (stab_settings[0] == STABILIZATIONDESIRED_STABILIZATIONMODE_VIRTUALBAR) ? cmd->Roll :
-	     (stab_settings[0] == STABILIZATIONDESIRED_STABILIZATIONMODE_HORIZON) ? cmd->Roll :
+	     (stab_settings[0] == STABILIZATIONDESIRED_STABILIZATIONMODE_HORIZON) ? expo3(cmd->Roll, stabSettings.HorizonExpo[STABILIZATIONSETTINGS_HORIZONEXPO_ROLL]) :
 	     (stab_settings[0] == STABILIZATIONDESIRED_STABILIZATIONMODE_MWRATE) ? expo3(cmd->Roll, stabSettings.RateExpo[STABILIZATIONSETTINGS_RATEEXPO_ROLL]) :
 	     (stab_settings[0] == STABILIZATIONDESIRED_STABILIZATIONMODE_SYSTEMIDENT) ? cmd->Roll * stabSettings.RollMax :
 	     (stab_settings[0] == STABILIZATIONDESIRED_STABILIZATIONMODE_COORDINATEDFLIGHT) ? cmd->Roll :
@@ -932,7 +971,7 @@ static void update_stabilization_desired(ManualControlCommandData * cmd, ManualC
 	     (stab_settings[1] == STABILIZATIONDESIRED_STABILIZATIONMODE_ATTITUDE) ? cmd->Pitch * stabSettings.PitchMax :
 	     (stab_settings[1] == STABILIZATIONDESIRED_STABILIZATIONMODE_AXISLOCK) ? expo3(cmd->Pitch, stabSettings.RateExpo[STABILIZATIONSETTINGS_RATEEXPO_PITCH]) * stabSettings.ManualRate[STABILIZATIONSETTINGS_MANUALRATE_PITCH] :
 	     (stab_settings[1] == STABILIZATIONDESIRED_STABILIZATIONMODE_VIRTUALBAR) ? cmd->Pitch :
-	     (stab_settings[1] == STABILIZATIONDESIRED_STABILIZATIONMODE_HORIZON) ? cmd->Pitch :
+	     (stab_settings[1] == STABILIZATIONDESIRED_STABILIZATIONMODE_HORIZON) ? expo3(cmd->Pitch, stabSettings.HorizonExpo[STABILIZATIONSETTINGS_HORIZONEXPO_PITCH]):
 	     (stab_settings[1] == STABILIZATIONDESIRED_STABILIZATIONMODE_MWRATE) ? expo3(cmd->Pitch, stabSettings.RateExpo[STABILIZATIONSETTINGS_RATEEXPO_PITCH]) :
 	     (stab_settings[1] == STABILIZATIONDESIRED_STABILIZATIONMODE_SYSTEMIDENT) ? cmd->Pitch * stabSettings.PitchMax :
 	     (stab_settings[1] == STABILIZATIONDESIRED_STABILIZATIONMODE_COORDINATEDFLIGHT) ? cmd->Pitch :
@@ -944,7 +983,7 @@ static void update_stabilization_desired(ManualControlCommandData * cmd, ManualC
 	     (stab_settings[2] == STABILIZATIONDESIRED_STABILIZATIONMODE_ATTITUDE) ? cmd->Yaw * stabSettings.YawMax :
 	     (stab_settings[2] == STABILIZATIONDESIRED_STABILIZATIONMODE_AXISLOCK) ? expo3(cmd->Yaw, stabSettings.RateExpo[STABILIZATIONSETTINGS_RATEEXPO_YAW]) * stabSettings.ManualRate[STABILIZATIONSETTINGS_MANUALRATE_YAW] :
 	     (stab_settings[2] == STABILIZATIONDESIRED_STABILIZATIONMODE_VIRTUALBAR) ? cmd->Yaw :
-	     (stab_settings[2] == STABILIZATIONDESIRED_STABILIZATIONMODE_HORIZON) ? cmd->Yaw :
+	     (stab_settings[2] == STABILIZATIONDESIRED_STABILIZATIONMODE_HORIZON) ? expo3(cmd->Yaw, stabSettings.HorizonExpo[STABILIZATIONSETTINGS_HORIZONEXPO_YAW]) :
 	     (stab_settings[2] == STABILIZATIONDESIRED_STABILIZATIONMODE_MWRATE) ? expo3(cmd->Yaw, stabSettings.RateExpo[STABILIZATIONSETTINGS_RATEEXPO_YAW]) :
 	     (stab_settings[2] == STABILIZATIONDESIRED_STABILIZATIONMODE_SYSTEMIDENT) ? cmd->Yaw * stabSettings.YawMax :
 	     (stab_settings[2] == STABILIZATIONDESIRED_STABILIZATIONMODE_COORDINATEDFLIGHT) ? cmd->Yaw :

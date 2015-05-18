@@ -79,6 +79,9 @@ include $(ROOT_DIR)/flight/targets/*/target-defs.mk
 # OpenPilot GCS build configuration (debug | release)
 GCS_BUILD_CONF ?= debug
 
+# And the flight build configuration (debug | default | release)
+export FLIGHT_BUILD_CONF ?= default
+
 ##############################
 #
 # Check that environmental variables are sane
@@ -98,6 +101,16 @@ ifdef GCS_BUILD_CONF
  ifneq ($(GCS_BUILD_CONF), release)
   ifneq ($(GCS_BUILD_CONF), debug)
    $(error Only debug or release are allowed for GCS_BUILD_CONF)
+  endif
+ endif
+endif
+
+ifdef FLIGHT_BUILD_CONF
+ ifneq ($(FLIGHT_BUILD_CONF), release)
+  ifneq ($(FLIGHT_BUILD_CONF), debug)
+   ifneq ($(FLIGHT_BUILD_CONF), default)
+    $(error Only debug or release are allowed for FLIGHT_BUILD_CONF)
+   endif
   endif
  endif
 endif
@@ -185,9 +198,7 @@ help:
 	@echo "   [Simulation]"
 	@echo "     sim_<os>_<board>     - Build host simulation firmware for <os> and <board>"
 	@echo "                            supported tuples are:"
-	@echo "                               sim_osx_revolution"
 	@echo "                               sim_posix_revolution"
-	@echo "                               sim_win32_revolution (broken)"
 	@echo "     sim_<os>_<board>_clean - Delete all build output for the simulation"
 	@echo
 	@echo "   [GCS]"
@@ -550,7 +561,7 @@ OPUAVSYNTHDIR := $(BUILD_DIR)/uavobject-synthetics/flight
 # $(1) = Canonical board name all in lower case (e.g. coptercontrol)
 # $(2) = Unused
 # $(3) = Short name for board (e.g. CC)
-# $(4) = Host sim variant (e.g. posix, osx, win32)
+# $(4) = Host sim variant (e.g. posix)
 # $(5) = Build output type (e.g. elf, exe)
 define SIM_TEMPLATE
 .PHONY: sim_$(4)_$(1)
@@ -833,7 +844,7 @@ EF_BOARDS  := $(ALL_BOARDS)
 ifeq ($(UNAME), Linux)
 SIM_BOARDS := sim_posix_revolution
 else ifeq ($(UNAME), Darwin)
-SIM_BOARDS := sim_osx_revolution
+SIM_BOARDS := sim_posix_revolution
 else ifdef WINDOWS
 SIM_BOARDS := 
 else # unknown OS
@@ -886,9 +897,7 @@ $(foreach board, $(BL_BOARDS), $(eval $(call BL_TEMPLATE,$(board),$($(board)_cpu
 $(foreach board, $(EF_BOARDS), $(eval $(call EF_TEMPLATE,$(board),$($(board)_friendly),$($(board)_short))))
 
 # Expand the available simulator rules
-$(eval $(call SIM_TEMPLATE,revolution,Revolution,'revo',osx,elf))
 $(eval $(call SIM_TEMPLATE,revolution,Revolution,'revo',posix,elf))
-$(eval $(call SIM_TEMPLATE,openpilot,OpenPilot,'op  ',win32,exe))
 
 ##############################
 #
@@ -905,7 +914,7 @@ $(UT_OUT_DIR):
 	$(V1) mkdir -p $@
 
 .PHONY: all_ut
-all_ut: $(addsuffix _elf, $(addprefix ut_, $(ALL_UNITTESTS)))
+all_ut: $(addsuffix _elf, $(addprefix ut_, $(ALL_UNITTESTS))) $(ALL_PYTHON_UNITTESTS)
 
 # The all_ut_tap goal is a legacy alias for the all_ut_xml target so that Jenkins
 # can still build old branches.  This can be deleted in a few months when all
@@ -979,6 +988,14 @@ python_ut_test:
 	$(V0) @echo "  PYTHON_UT test.py"
 	$(V1) $(PYTHON) python/test.py
 
+.PHONY: python_ut_ins
+python_ut_ins:
+	$(V0) @echo "  PYTHON_UT ins/test.py"
+	$(V1) ( cd python/ins && \
+	  $(PYTHON) setup.py build_ext --inplace && \
+	  $(PYTHON) test.py \
+	)
+
 # Disable parallel make when the all_ut_run target is requested otherwise the TAP
 # output is interleaved with the rest of the make output.
 ifneq ($(strip $(filter all_ut_run,$(MAKECMDGOALS))),)
@@ -995,7 +1012,7 @@ endif
 .PHONY: package
 package:
 	$(V1) cd $@ && $(MAKE) --no-print-directory $@
-	
+
 .PHONY: standalone
 standalone:
 	$(V1) cd package && $(MAKE) --no-print-directory $@
